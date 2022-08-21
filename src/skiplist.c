@@ -66,7 +66,8 @@ skipnode_find(struct skip_head *head, const void *key,
     return NULL;
 }
 
-int skiplist_insert(struct skip_head *head, void *data, skiplist_cmp_t cmp)
+int skiplist_insert(struct skip_head *head, void *data,
+                    skiplist_cmp_t cmp)
 {
     struct skip_node *walk, *match, *node;
     struct list_head *list;
@@ -132,7 +133,7 @@ skipnode_even_find(struct skip_head *head, const void *key,
     struct skip_node *walk, *match;
     struct list_head *list;
     unsigned long disparity, compare;
-    bool signplus;
+    bool signplus, tmpplus;
 
     if (unlikely(!level))
         return NULL;
@@ -142,35 +143,30 @@ skipnode_even_find(struct skip_head *head, const void *key,
     disparity = find(match->pdata, key, &signplus);
 
     for (; level--; --list) {
-        if (disparity) {
+        if (signplus == false) {
             if ((walk = list_next_entry_or_null(match, list, list[level]))) {
                 list_for_each_entry_from(walk, list, list[level]) {
-                    compare = find(walk->pdata, key, &signplus);
-                    if (disparity <= compare &&
-                        (disparity == compare && signplus != false))
+                    compare = find(walk->pdata, key, &tmpplus);
+                    if (disparity < compare)
                         break;
                     disparity = compare;
                     match = walk;
-                    if (!disparity)
-                        goto finish;
+                    signplus = tmpplus;
                 }
             }
-
+        } else {
             if ((walk = list_prev_entry_or_null(match, list, list[level]))) {
                 list_for_each_entry_reverse_from(walk, list, list[level]) {
-                    compare = find(walk->pdata, key, &signplus);
-                    if (disparity >= compare &&
-                        (disparity == compare && signplus != true))
+                    compare = find(walk->pdata, key, &tmpplus);
+                    if (disparity < compare)
                         break;
                     disparity = compare;
                     match = walk;
-                    if (!disparity)
-                        goto finish;
+                    signplus = tmpplus;
                 }
             }
         }
 
-finish:
         if (disparity == 0) {
             if (plev)
                 *plev = level + 1;
@@ -181,13 +177,14 @@ finish:
     return NULL;
 }
 
-int skiplist_even_insert(struct skip_head *head, void *data, skiplist_even_cmp_t cmp)
+int skiplist_even_insert(struct skip_head *head, void *data,
+                         skiplist_even_cmp_t cmp)
 {
     struct skip_node *walk, *match, *node;
     struct list_head *list;
     unsigned int level;
     unsigned long disparity, compare;
-    bool signplus;
+    bool signplus, tmpplus;
 
     level = random_level(head);
     head->curr = head->curr > level ? head->curr : level;
@@ -210,25 +207,27 @@ int skiplist_even_insert(struct skip_head *head, void *data, skiplist_even_cmp_t
 
     for (; level--; --list) {
         if (disparity) {
-            if ((walk = list_next_entry_or_null(match, list, list[level]))) {
-                list_for_each_entry_from(walk, list, list[level]) {
-                    compare = cmp(node->pdata, walk->pdata, &signplus);
-                    if (disparity <= compare &&
-                        (disparity == compare && signplus != true))
-                        break;
-                    disparity = compare;
-                    match = walk;
+            if (signplus == true) {
+                if ((walk = list_next_entry_or_null(match, list, list[level]))) {
+                    list_for_each_entry_from(walk, list, list[level]) {
+                        compare = cmp(data, walk->pdata, &tmpplus);
+                        if (disparity < compare)
+                            break;
+                        disparity = compare;
+                        match = walk;
+                        signplus = tmpplus;
+                    }
                 }
-            }
-
-            if ((walk = list_prev_entry_or_null(match, list, list[level]))) {
-                list_for_each_entry_reverse_from(walk, list, list[level]) {
-                    compare = cmp(node->pdata, walk->pdata, &signplus);
-                    if (disparity <= compare &&
-                        (disparity == compare && signplus != false))
-                        break;
-                    disparity = compare;
-                    match = walk;
+            } else {
+                if ((walk = list_prev_entry_or_null(match, list, list[level]))) {
+                    list_for_each_entry_reverse_from(walk, list, list[level]) {
+                        compare = cmp(data, walk->pdata, &tmpplus);
+                        if (disparity < compare)
+                            break;
+                        disparity = compare;
+                        match = walk;
+                        signplus = tmpplus;
+                    }
                 }
             }
         }
